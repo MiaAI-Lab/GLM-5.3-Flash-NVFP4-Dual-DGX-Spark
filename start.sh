@@ -514,6 +514,23 @@ launch_cluster() {
         -e "FLASHINFER_CUDA_ARCH_LIST=$FLASHINFER_CUDA_ARCH_LIST"
         -e FLASHINFER_DISABLE_VERSION_CHECK=1
         -e PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+        # Ray's memory monitor kills worker actors at 95% NODE memory
+        # (RAY_memory_usage_threshold default 0.95). On a GB10 Spark the 119.7
+        # GiB is UNIFIED, so vLLM's ~100 GiB reservation plus the page cache
+        # needed to stream a 181 GiB checkpoint crosses that line DURING weight
+        # loading. Ray kills the actor, the loading progress bar simply stops,
+        # and it presents as a hang rather than an error — the raylet reason is
+        # only visible as ray.exceptions.OutOfMemoryError buried in the log.
+        #
+        # This does not occur on a pair with nothing else resident, which is
+        # presumably why the published profile does not hit it. It reproduces
+        # reliably on a Spark that also runs an application: five consecutive
+        # launches froze between 40% and 80% of loading, and disabling the
+        # monitor took the same config straight through to serving.
+        #
+        # Safe because --gpu-memory-utilization already bounds the allocation;
+        # this only removes Ray's duplicate, and less informative, guard.
+        -e RAY_memory_monitor_refresh_ms=0
     )
     local worker_nccl="" e
     for e in "${nccl_common[@]}"; do

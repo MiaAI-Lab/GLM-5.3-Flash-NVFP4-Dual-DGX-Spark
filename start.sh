@@ -540,7 +540,7 @@ launch_cluster() {
     # optional extra passthrough
     local worker_passthru="" v val
     local -a head_env=()
-    for v in HF_HUB_OFFLINE; do
+    for v in HF_HUB_OFFLINE VLLM_API_KEY; do
         val="${!v:-}"
         if [ -n "$val" ]; then
             head_env+=(-e "$v=$val")

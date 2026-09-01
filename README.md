@@ -11,7 +11,7 @@ Serve the **[LibertAIDAI/GLM-5.3-Flash-NVFP4](https://huggingface.co/LibertAIDAI
 
 ## Hardware / topology
 
-Two GB10 Sparks (SM121, 128 GiB UMA each), one GPU per node, **TP=2** via Ray.
+Two GB10 Sparks (SM121, 128 GiB UMA each), one GPU per node, **TP=2** via Ray. This branch also has experimental [`./start-tp4.sh`](start-tp4.sh) for **4× Spark / TP=4** on a RoCE switch — see [Experimental TP=4](#experimental-tp4-4-spark-this-branch-only).
 
 ```
 spark1 (head)                         spark2 (worker)
@@ -91,6 +91,20 @@ curl -s http://127.0.0.1:8888/v1/chat/completions \
 
 Image + video use standard OpenAI multimodal content parts (`image_url` / `video_url`). Turn thinking off per request with `chat_template_kwargs` (see [Notes](#notes)).
 
+## Experimental TP=4 (4× Spark, this branch only)
+
+`experimental/tp4` adds an **untested** sibling launcher for **4× DGX Spark** on a **RoCE switch**. It does not change `./start.sh`. We cannot verify it here (2 Sparks only); a 4-node owner can.
+
+```bash
+git checkout experimental/tp4
+cp env.tp4.example .env.tp4   # fill in 4 CX7 IPs, SSH targets, IF + HCA names
+./start-tp4.sh
+```
+
+- Containers: `glm53-flash-tp4-head` + `glm53-flash-tp4-w1..w3` (will not collide with the 2-node pair).
+- Fabric: every CX7 on the **same RoCE L2**. `HEAD_IP` / `WORKER*_IP` must be those NIC addresses. A switchless QSFP ring is **not** this script — use [alexellis/glm-5.3-flash-4x-dgx-spark-switchless](https://github.com/alexellis/glm-5.3-flash-4x-dgx-spark-switchless).
+- `/health` is the only success signal. Same serve knobs as `start.sh` (`MOE_BACKEND`, `GPU_MEM_UTIL`, …). `./start-tp4.sh stop` / `./stop-tp4.sh` tears down the TP4 set only.
+
 ## Image
 
 Serving tag: **`mia/glm53-flash-spark:mm-ray-v1`** (local default; `start.sh` does not change this).
@@ -157,7 +171,9 @@ CX7 pins (`HEAD_CX7_IF`, `WORKER_CX7_IF`, `HEAD_CX7_IB`, `WORKER_CX7_IB`) defaul
 
 | Path | Role |
 |---|---|
-| [`start.sh`](start.sh) | Start / stop / restart / status / logs |
+| [`start.sh`](start.sh) | Start / stop / restart / status / logs (supported 2× Spark path) |
+| [`start-tp4.sh`](start-tp4.sh) | **Experimental** 4× Spark TP=4 (this branch). Needs `.env.tp4` from [`env.tp4.example`](env.tp4.example) |
+| [`stop-tp4.sh`](stop-tp4.sh) | Stop TP4 containers only (`./start-tp4.sh stop`) |
 | [`files/build.sh`](files/build.sh) | Build kernel v8 + `mm-ray-v1` if missing |
 | [`files/Dockerfile`](files/Dockerfile) | Kernel layer `glm53-flash-sm121:v8` |
 | [`files/Dockerfile.mm-ray`](files/Dockerfile.mm-ray) | Serving layer (Ray + MM + :8888) |
